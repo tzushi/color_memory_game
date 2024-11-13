@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Memory Game</title>
+    <style>
+        /* 前回と同じスタイル定義 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+
+        .game-container {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .game-board {
+            width: 300px;
+            height: 300px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .color-btn {
+            border: none;
+            border-radius: 1rem;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .color-btn:active:not(:disabled) {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-btn::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            background-image: radial-gradient(circle, rgba(255,255,255,.7) 10%, transparent 60%);
+            transform: scale(5);
+            opacity: 0;
+            transition: transform 0.5s, opacity 0.5s;
+        }
+
+        .color-btn.clicked::after {
+            transform: scale(0);
+            opacity: 1;
+            transition: 0s;
+        }
+
+        .color-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .color-btn.yellow { background-color: #ffd700; }
+        .color-btn.red { background-color: #ff4444; }
+        .color-btn.green { background-color: #4CAF50; }
+        .color-btn.blue { background-color: #2196F3; }
+
+        .color-btn.highlight.yellow { background-color: #fff3a0; }
+        .color-btn.highlight.red { background-color: #ff8888; }
+        .color-btn.highlight.green { background-color: #81c784; }
+        .color-btn.highlight.blue { background-color: #64b5f6; }
+
+        .color-btn.pressed {
+            filter: brightness(1.3);
+        }
+
+        .score {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .start-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .start-btn:hover:not(:disabled) {
+            background-color: #45a049;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .start-btn:active:not(:disabled) {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .start-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .game-over {
+            color: #ff4444;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        /* サウンドコントロール用のスタイル */
+        .sound-control {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem;
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="sound-control">
+        <label for="sound-toggle">Sound:</label>
+        <input type="checkbox" id="sound-toggle" checked>
+    </div>
+    <div class="game-container">
+        <h1>Color Memory Game</h1>
+        <div class="score">Score: <span id="score">0</span></div>
+        <div class="game-board">
+            <button class="color-btn yellow" data-index="0"></button>
+            <button class="color-btn red" data-index="1"></button>
+            <button class="color-btn green" data-index="2"></button>
+            <button class="color-btn blue" data-index="3"></button>
+        </div>
+        <div class="game-over" id="gameOver">Game Over!</div>
+        <button class="start-btn" id="startBtn">Start Game</button>
+    </div>
+
+    <script>
+        class SoundManager {
+            constructor() {
+                this.context = new (window.AudioContext || window.webkitAudioContext)();
+                this.enabled = true;
+                this.setupSoundToggle();
+            }
+
+            setupSoundToggle() {
+                const toggle = document.getElementById('sound-toggle');
+                toggle.addEventListener('change', (e) => {
+                    this.enabled = e.target.checked;
+                });
+            }
+
+            createTone(frequency, duration = 0.1) {
+                if (!this.enabled) return;
+                
+                const oscillator = this.context.createOscillator();
+                const gainNode = this.context.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.context.destination);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(frequency, this.context.currentTime);
+                
+                gainNode.gain.setValueAtTime(0.5, this.context.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + duration);
+                
+                oscillator.start(this.context.currentTime);
+                oscillator.stop(this.context.currentTime + duration);
+            }
+
+            playHighlight(index) {
+                // 各色に対応する周波数を設定
+                const frequencies = [523.25, 587.33, 659.25, 698.46]; // C5, D5, E5, F5
+                this.createTone(frequencies[index], 0.2);
+            }
+
+            playClick(index) {
+                // クリック音は1オクターブ上の音を使用
+                const frequencies = [1046.50, 1174.66, 1318.51, 1396.91]; // C6, D6, E6, F6
+                this.createTone(frequencies[index], 0.1);
+            }
+
+            playGameOver() {
+                if (!this.enabled) return;
+                
+                const frequencies = [440, 349.23, 293.66]; // A4, F4, D4
+                frequencies.forEach((freq, i) => {
+                    setTimeout(() => this.createTone(freq, 0.2), i * 200);
+                });
+            }
+        }
+
+        class MemoryGame {
+            constructor() {
+                this.sequence = [];
+                this.playerSequence = [];
+                this.isPlaying = false;
+                this.gameOver = false;
+                this.score = 0;
+                this.highlightedIndex = null;
+                this.soundManager = new SoundManager();
+
+                // DOM elements
+                this.buttons = Array.from(document.querySelectorAll('.color-btn'));
+                this.startBtn = document.getElementById('startBtn');
+                this.scoreElement = document.getElementById('score');
+                this.gameOverElement = document.getElementById('gameOver');
+
+                // Bind event listeners
+                this.startBtn.addEventListener('click', () => this.startNewGame());
+                this.buttons.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const index = parseInt(btn.dataset.index);
+                        this.handleColorClick(index);
+                    });
+                    
+                    btn.addEventListener('mousedown', () => this.addClickEffect(btn));
+                    btn.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.addClickEffect(btn);
+                    });
+                    
+                    const removeEffect = (btn) => {
+                        btn.classList.remove('clicked');
+                        btn.classList.remove('pressed');
+                    };
+                    btn.addEventListener('mouseup', () => removeEffect(btn));
+                    btn.addEventListener('mouseleave', () => removeEffect(btn));
+                    btn.addEventListener('touchend', () => removeEffect(btn));
+                    btn.addEventListener('touchcancel', () => removeEffect(btn));
+                });
+            }
+
+            addClickEffect(button) {
+                if (this.isPlaying || this.gameOver) return;
+                button.classList.add('clicked');
+                button.classList.add('pressed');
+                setTimeout(() => button.classList.remove('clicked'), 500);
+            }
+
+            startNewGame() {
+                this.sequence = [];
+                this.playerSequence = [];
+                this.isPlaying = false;
+                this.gameOver = false;
+                this.score = 0;
+                this.highlightedIndex = null;
+                
+                this.updateScore();
+                this.gameOverElement.style.display = 'none';
+                this.addToSequence();
+            }
+
+            addToSequence() {
+                const randomIndex = Math.floor(Math.random() * this.buttons.length);
+                this.sequence.push(randomIndex);
+                this.playSequence();
+            }
+
+            async playSequence() {
+                this.isPlaying = true;
+                this.startBtn.disabled = true;
+                this.playerSequence = [];
+
+                for (let i = 0; i < this.sequence.length; i++) {
+                    await this.highlightColor(this.sequence[i]);
+                    await this.wait(300);
+                }
+
+                this.isPlaying = false;
+            }
+
+            async highlightColor(index) {
+                this.highlightedIndex = index;
+                const button = this.buttons[index];
+                button.classList.add('highlight');
+                this.soundManager.playHighlight(index);
+                await this.wait(500);
+                button.classList.remove('highlight');
+                this.highlightedIndex = null;
+            }
+
+            handleColorClick(index) {
+                if (this.isPlaying || this.gameOver) return;
+
+                this.soundManager.playClick(index);
+                this.highlightColor(index);
+                this.playerSequence.push(index);
+
+                const currentIndex = this.playerSequence.length - 1;
+                if (this.sequence[currentIndex] !== index) {
+                    this.handleGameOver();
+                    return;
+                }
+
+                if (this.playerSequence.length === this.sequence.length) {
+                    this.score = this.sequence.length;
+                    this.updateScore();
+                    setTimeout(() => this.addToSequence(), 1000);
+                }
+            }
+
+            handleGameOver() {
+                this.gameOver = true;
+                this.gameOverElement.style.display = 'block';
+                this.startBtn.disabled = false;
+                this.soundManager.playGameOver();
+            }
+
+            updateScore() {
+                this.scoreElement.textContent = this.score;
+            }
+
+            wait(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+
+        // Initialize the game when the DOM is loaded
+        window.addEventListener('DOMContentLoaded', () => {
+            new MemoryGame();
+        });
+    </script>
+</body>
+</html>
