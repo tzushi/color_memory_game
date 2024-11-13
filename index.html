@@ -2,15 +2,15 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Memory Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Memory Game</title>
     <style>
-        /* 前回と同じスタイル定義 */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
@@ -20,6 +20,7 @@
             min-height: 100vh;
             background-color: #f0f0f0;
             font-family: Arial, sans-serif;
+            touch-action: none;
         }
 
         .game-container {
@@ -28,16 +29,20 @@
             border-radius: 1rem;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             text-align: center;
+            max-width: 90vw;
+            width: 400px;
+            touch-action: none;
         }
 
         .game-board {
-            width: 300px;
-            height: 300px;
+            width: 100%;
+            aspect-ratio: 1;
             display: grid;
             grid-template-columns: 1fr 1fr;
             grid-template-rows: 1fr 1fr;
             gap: 1rem;
             margin: 1.5rem 0;
+            touch-action: none;
         }
 
         .color-btn {
@@ -48,16 +53,7 @@
             position: relative;
             overflow: hidden;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .color-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .color-btn:active:not(:disabled) {
-            transform: translateY(1px);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            touch-action: none;
         }
 
         .color-btn::after {
@@ -80,13 +76,6 @@
             transition: 0s;
         }
 
-        .color-btn:disabled {
-            cursor: not-allowed;
-            opacity: 0.7;
-            transform: none;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
         .color-btn.yellow { background-color: #ffd700; }
         .color-btn.red { background-color: #ff4444; }
         .color-btn.green { background-color: #4CAF50; }
@@ -99,6 +88,7 @@
 
         .color-btn.pressed {
             filter: brightness(1.3);
+            transform: scale(0.95);
         }
 
         .score {
@@ -114,19 +104,8 @@
             font-size: 1rem;
             border-radius: 0.5rem;
             cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .start-btn:hover:not(:disabled) {
-            background-color: #45a049;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-        }
-
-        .start-btn:active:not(:disabled) {
-            transform: translateY(1px);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.2s;
+            touch-action: manipulation;
         }
 
         .start-btn:disabled {
@@ -141,7 +120,6 @@
             display: none;
         }
 
-        /* サウンドコントロール用のスタイル */
         .sound-control {
             position: absolute;
             top: 1rem;
@@ -153,6 +131,18 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            z-index: 1000;
+        }
+
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 1.5rem;
+            }
+            
+            .sound-control {
+                top: 0.5rem;
+                right: 0.5rem;
+            }
         }
     </style>
 </head>
@@ -162,13 +152,13 @@
         <input type="checkbox" id="sound-toggle" checked>
     </div>
     <div class="game-container">
-        <h1>Color Memory Game</h1>
+        <h1>Memory Game</h1>
         <div class="score">Score: <span id="score">0</span></div>
         <div class="game-board">
-            <button class="color-btn yellow" data-index="0"></button>
-            <button class="color-btn red" data-index="1"></button>
-            <button class="color-btn green" data-index="2"></button>
-            <button class="color-btn blue" data-index="3"></button>
+            <button class="color-btn yellow" data-index="0" aria-label="yellow"></button>
+            <button class="color-btn red" data-index="1" aria-label="red"></button>
+            <button class="color-btn green" data-index="2" aria-label="green"></button>
+            <button class="color-btn blue" data-index="3" aria-label="blue"></button>
         </div>
         <div class="game-over" id="gameOver">Game Over!</div>
         <button class="start-btn" id="startBtn">Start Game</button>
@@ -177,9 +167,24 @@
     <script>
         class SoundManager {
             constructor() {
-                this.context = new (window.AudioContext || window.webkitAudioContext)();
+                this.context = null;
                 this.enabled = true;
                 this.setupSoundToggle();
+                this.initializeAudioContext();
+            }
+
+            initializeAudioContext() {
+                const initAudio = () => {
+                    if (!this.context) {
+                        this.context = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    // 一度初期化したらイベントリスナーを削除
+                    document.removeEventListener('touchstart', initAudio);
+                    document.removeEventListener('click', initAudio);
+                };
+
+                document.addEventListener('touchstart', initAudio);
+                document.addEventListener('click', initAudio);
             }
 
             setupSoundToggle() {
@@ -190,7 +195,7 @@
             }
 
             createTone(frequency, duration = 0.1) {
-                if (!this.enabled) return;
+                if (!this.enabled || !this.context) return;
                 
                 const oscillator = this.context.createOscillator();
                 const gainNode = this.context.createGain();
@@ -209,21 +214,19 @@
             }
 
             playHighlight(index) {
-                // 各色に対応する周波数を設定
-                const frequencies = [523.25, 587.33, 659.25, 698.46]; // C5, D5, E5, F5
+                const frequencies = [523.25, 587.33, 659.25, 698.46];
                 this.createTone(frequencies[index], 0.2);
             }
 
             playClick(index) {
-                // クリック音は1オクターブ上の音を使用
-                const frequencies = [1046.50, 1174.66, 1318.51, 1396.91]; // C6, D6, E6, F6
+                const frequencies = [1046.50, 1174.66, 1318.51, 1396.91];
                 this.createTone(frequencies[index], 0.1);
             }
 
             playGameOver() {
-                if (!this.enabled) return;
+                if (!this.enabled || !this.context) return;
                 
-                const frequencies = [440, 349.23, 293.66]; // A4, F4, D4
+                const frequencies = [440, 349.23, 293.66];
                 frequencies.forEach((freq, i) => {
                     setTimeout(() => this.createTone(freq, 0.2), i * 200);
                 });
@@ -239,36 +242,53 @@
                 this.score = 0;
                 this.highlightedIndex = null;
                 this.soundManager = new SoundManager();
+                this._lastClickTime = 0;
 
-                // DOM elements
                 this.buttons = Array.from(document.querySelectorAll('.color-btn'));
                 this.startBtn = document.getElementById('startBtn');
                 this.scoreElement = document.getElementById('score');
                 this.gameOverElement = document.getElementById('gameOver');
 
-                // Bind event listeners
                 this.startBtn.addEventListener('click', () => this.startNewGame());
+
+                // タッチとクリックのイベントハンドリング
                 this.buttons.forEach(btn => {
-                    btn.addEventListener('click', () => {
+                    // クリックイベント
+                    btn.addEventListener('click', (e) => {
                         const index = parseInt(btn.dataset.index);
                         this.handleColorClick(index);
                     });
                     
-                    btn.addEventListener('mousedown', () => this.addClickEffect(btn));
+                    // タッチイベント
                     btn.addEventListener('touchstart', (e) => {
                         e.preventDefault();
+                        const index = parseInt(btn.dataset.index);
+                        this.handleColorClick(index);
                         this.addClickEffect(btn);
-                    });
+                    }, { passive: false });
                     
                     const removeEffect = (btn) => {
                         btn.classList.remove('clicked');
                         btn.classList.remove('pressed');
                     };
-                    btn.addEventListener('mouseup', () => removeEffect(btn));
-                    btn.addEventListener('mouseleave', () => removeEffect(btn));
-                    btn.addEventListener('touchend', () => removeEffect(btn));
-                    btn.addEventListener('touchcancel', () => removeEffect(btn));
+
+                    btn.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        removeEffect(btn);
+                    }, { passive: false });
+
+                    btn.addEventListener('touchcancel', (e) => {
+                        e.preventDefault();
+                        removeEffect(btn);
+                    }, { passive: false });
                 });
+
+                // スクロール防止
+                document.addEventListener('touchmove', (e) => {
+                    if (e.target.closest('.game-board')) {
+                        e.preventDefault();
+                    }
+                }, { passive: false });
             }
 
             addClickEffect(button) {
@@ -276,6 +296,32 @@
                 button.classList.add('clicked');
                 button.classList.add('pressed');
                 setTimeout(() => button.classList.remove('clicked'), 500);
+            }
+
+            handleColorClick(index) {
+                if (this.isPlaying || this.gameOver) return;
+
+                // タッチデバイスでの二重実行防止
+                if (Date.now() - this._lastClickTime < 300) {
+                    return;
+                }
+                this._lastClickTime = Date.now();
+
+                this.soundManager.playClick(index);
+                this.highlightColor(index);
+                this.playerSequence.push(index);
+
+                const currentIndex = this.playerSequence.length - 1;
+                if (this.sequence[currentIndex] !== index) {
+                    this.handleGameOver();
+                    return;
+                }
+
+                if (this.playerSequence.length === this.sequence.length) {
+                    this.score = this.sequence.length;
+                    this.updateScore();
+                    setTimeout(() => this.addToSequence(), 1000);
+                }
             }
 
             startNewGame() {
@@ -320,26 +366,6 @@
                 this.highlightedIndex = null;
             }
 
-            handleColorClick(index) {
-                if (this.isPlaying || this.gameOver) return;
-
-                this.soundManager.playClick(index);
-                this.highlightColor(index);
-                this.playerSequence.push(index);
-
-                const currentIndex = this.playerSequence.length - 1;
-                if (this.sequence[currentIndex] !== index) {
-                    this.handleGameOver();
-                    return;
-                }
-
-                if (this.playerSequence.length === this.sequence.length) {
-                    this.score = this.sequence.length;
-                    this.updateScore();
-                    setTimeout(() => this.addToSequence(), 1000);
-                }
-            }
-
             handleGameOver() {
                 this.gameOver = true;
                 this.gameOverElement.style.display = 'block';
@@ -356,7 +382,7 @@
             }
         }
 
-        // Initialize the game when the DOM is loaded
+        // ページ読み込み時にゲームを初期化
         window.addEventListener('DOMContentLoaded', () => {
             new MemoryGame();
         });
